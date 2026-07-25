@@ -16,9 +16,23 @@ class FocusSessionSerializer(serializers.ModelSerializer):
 
 
 class TaskPlanSerializer(serializers.ModelSerializer):
-    sessions = FocusSessionSerializer(many=True, read_only=True)
+    # 1. Remove read_only=True and set required=False so DRF accepts incoming session arrays
+    sessions = FocusSessionSerializer(many=True, required=False)
 
     class Meta:
         model = TaskPlan
         fields = ['id', 'title', 'category', 'estimated_minutes', 'session_duration', 'created_at', 'sessions']
-        read_only_fields = ['user']
+        read_only_fields = ['user', 'created_at']
+
+    # 2. Override create() to save both TaskPlan and its nested FocusSessions into PostgreSQL
+    def create(self, validated_data):
+        sessions_data = validated_data.pop('sessions', [])
+        
+        # Create parent TaskPlan instance
+        task_plan = TaskPlan.objects.create(**validated_data)
+        
+        # Create each nested FocusSession tied to the newly created task_plan
+        for session_data in sessions_data:
+            FocusSession.objects.create(task_plan=task_plan, **session_data)
+            
+        return task_plan

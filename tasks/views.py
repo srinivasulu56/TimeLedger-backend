@@ -15,12 +15,13 @@ def task_plan_list_create(request):
         return Response(serializer.data)
 
     elif request.method == 'POST':
-        # Expects: { title, category, estimated_minutes, session_duration, subtasks: ['Part 1', 'Part 2'] }
         title = request.data.get('title')
         category = request.data.get('category', 'Development')
         estimated_minutes = request.data.get('estimated_minutes', 120)
         session_duration = request.data.get('session_duration', 45)
-        subtasks = request.data.get('subtasks', [])
+        
+        # 1. Accept either 'subtasks' OR 'sessions' from request payload
+        raw_subtasks = request.data.get('subtasks') or request.data.get('sessions') or []
 
         task = TaskPlan.objects.create(
             user=request.user,
@@ -30,13 +31,20 @@ def task_plan_list_create(request):
             session_duration=session_duration
         )
 
-        # Auto-generate child FocusSession objects
-        for index, topic in enumerate(subtasks):
+        # 2. Auto-generate child FocusSession records in PostgreSQL
+        for index, item in enumerate(raw_subtasks):
+            if isinstance(item, dict):
+                topic = item.get('topic', f'Session {index + 1}')
+                planned_duration = item.get('planned_duration') or item.get('plannedDuration') or session_duration
+            else:
+                topic = str(item)
+                planned_duration = session_duration
+
             FocusSession.objects.create(
                 task_plan=task,
                 order=index + 1,
                 topic=topic,
-                planned_duration=session_duration,
+                planned_duration=planned_duration,
                 status='planned'
             )
 
